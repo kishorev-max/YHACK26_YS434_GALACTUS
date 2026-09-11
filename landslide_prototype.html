@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Landslide Early Warning — NE India | Team Galactus</title>
+<style>
+  :root{
+    --bg:#0c1310;
+    --panel:#121b16;
+    --panel-alt:#17221b;
+    --line:#28382f;
+    --text:#e7ede8;
+    --muted:#8ea394;
+    --accent:#5fa77e;
+    --accent-dim:#3c6e52;
+    --low:#4c9a6b;
+    --mod:#d9a441;
+    --high:#d9622f;
+    --crit:#b3222a;
+    --serif: "Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --sans: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  ::selection{background:var(--accent-dim);}
+  a{color:var(--accent);}
+
+  /* ---------- layout shell ---------- */
+  #app{display:grid;grid-template-rows:auto 1fr;height:100vh;}
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 22px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#101a15,#0c1310);
+  }
+  .brand{display:flex;align-items:baseline;gap:12px;}
+  .brand h1{
+    font-family:var(--serif);font-weight:600;font-size:19px;letter-spacing:.2px;margin:0;color:var(--text);
+  }
+  .brand .sub{font-size:12px;color:var(--muted);}
+  .status-pill{
+    display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+    border:1px solid var(--line);padding:6px 12px;border-radius:20px;background:var(--panel);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(95,167,126,.18);}
+  .dot.pulse{animation:pulse 2s infinite;}
+  @keyframes pulse{0%{opacity:1;}50%{opacity:.35;}100%{opacity:1;}}
+
+  main{display:grid;grid-template-columns:300px 1fr 320px;min-height:0;}
+  @media (max-width:1100px){ main{grid-template-columns:260px 1fr;} #detail{display:none;} }
+
+  section.panel{overflow-y:auto;border-right:1px solid var(--line);background:var(--panel);}
+  #detail{border-right:none;border-left:1px solid var(--line);}
+
+  .panel-inner{padding:18px;}
+  .block{margin-bottom:22px;}
+  .block h2{
+    font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);
+    margin:0 0 10px 0;font-weight:600;
+  }
+
+  /* controls */
+  .slider-row{margin-bottom:14px;}
+  .slider-row .lbl{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px;color:var(--text);}
+  .slider-row .lbl span.val{color:var(--accent);font-family:var(--mono);}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--line);outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);
+    border:2px solid #0c1310;cursor:pointer;margin-top:-5px;
+  }
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid #0c1310;cursor:pointer;}
+
+  .scenario-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+  .scenario-btn{
+    background:var(--panel-alt);border:1px solid var(--line);color:var(--text);
+    padding:9px 8px;font-size:11.5px;border-radius:6px;cursor:pointer;text-align:left;line-height:1.3;
+    transition:border-color .15s, background .15s;
+  }
+  .scenario-btn:hover{border-color:var(--accent-dim);background:#1c2921;}
+
+  .run-btn{
+    width:100%;padding:11px;border-radius:6px;border:none;background:var(--accent);
+    color:#08130d;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.2px;
+    transition:transform .1s, background .15s;
+  }
+  .run-btn:hover{background:#72c091;}
+  .run-btn:active{transform:scale(.98);}
+
+  /* legend */
+  .legend-row{display:flex;align-items:center;gap:9px;font-size:12.5px;margin-bottom:7px;color:var(--text);}
+  .swatch{width:11px;height:11px;border-radius:3px;flex:none;}
+
+  /* stats */
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .stat{background:var(--panel-alt);border:1px solid var(--line);border-radius:6px;padding:10px;}
+  .stat .n{font-family:var(--serif);font-size:22px;line-height:1;}
+  .stat .l{font-size:10.5px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.6px;}
+
+  /* alert banner */
+  .alert-box{
+    border:1px solid var(--accent-dim);background:rgba(95,167,126,.08);border-radius:6px;
+    padding:10px 12px;font-size:12.5px;color:var(--text);min-height:52px;display:flex;flex-direction:column;justify-content:center;
+  }
+  .alert-box .lang{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px;}
+
+  /* priority list */
+  .pri-item{
+    display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;
+  }
+  .pri-item:last-child{border-bottom:none;}
+  .pri-rank{font-family:var(--serif);font-size:15px;color:var(--muted);width:16px;}
+  .pri-body{flex:1;min-width:0;}
+  .pri-town{font-size:13px;font-weight:600;}
+  .pri-eta{font-size:11px;color:var(--muted);}
+  .pri-tag{font-size:10px;padding:3px 7px;border-radius:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+
+  /* map area */
+  #mapwrap{position:relative;background:radial-gradient(ellipse at 30% 20%,#132019,#0a100d 75%);overflow:hidden;}
+  #mapwrap svg{position:absolute;inset:0;width:100%;height:100%;}
+  .town-label{font-size:10px;fill:var(--muted);font-family:var(--sans);}
+  .pt{cursor:pointer;transition:r .15s, opacity .2s;}
+  .pt:hover{stroke:#fff;stroke-width:1.5;}
+  .report-pt{cursor:pointer;}
+  .map-caption{
+    position:absolute;bottom:12px;left:14px;font-size:11px;color:var(--muted);
+    background:rgba(12,19,16,.75);padding:6px 10px;border-radius:5px;border:1px solid var(--line);max-width:340px;
+  }
+  .map-toolbar{position:absolute;top:12px;right:14px;display:flex;gap:8px;}
+  .tool-btn{
+    background:rgba(18,27,22,.9);border:1px solid var(--line);color:var(--text);
+    padding:7px 12px;font-size:11.5px;border-radius:6px;cursor:pointer;
+  }
+  .tool-btn.active{background:var(--accent);color:#08130d;border-color:var(--accent);font-weight:700;}
+
+  /* detail panel */
+  .empty-state{padding:40px 18px;color:var(--muted);font-size:13px;text-align:center;line-height:1.6;}
+  .det-title{font-family:var(--serif);font-size:19px;margin:0 0 2px 0;}
+  .det-coords{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;}
+  .risk-badge{
+    display:inline-block;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;
+  }
+  .gauge-wrap{margin-bottom:16px;}
+  .gauge-track{height:8px;background:var(--panel-alt);border-radius:4px;overflow:hidden;margin-top:6px;}
+  .gauge-fill{height:100%;border-radius:4px;transition:width .4s ease;}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:8px;}
+  .kv .k{color:var(--muted);}
+  .feat-row{margin-bottom:10px;}
+  .feat-lbl{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;}
+  .feat-track{height:6px;background:var(--panel-alt);border-radius:3px;overflow:hidden;}
+  .feat-fill{height:100%;border-radius:3px;}
+  .explain-box{
+    background:var(--panel-alt);border:1px solid var(--line);border-radius:6px;padding:12px;
+    font-size:12.5px;line-height:1.55;margin:14px 0;
+  }
+  .advisory{
+    border-left:3px solid var(--high);padding:10px 12px;background:rgba(217,98,47,.08);
+    font-size:12.5px;line-height:1.5;border-radius:0 6px 6px 0;
+  }
+
+  footer.note{
+    grid-column:1/-1;
+  }
+  .foot-strip{
+    border-top:1px solid var(--line);padding:9px 22px;font-size:11px;color:var(--muted);
+    display:flex;justify-content:space-between;background:var(--panel);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="brand">
+      <h1>Landslide Early Warning — North-East India</h1>
+      <span class="sub">Team Galactus · YHACK'26 · PS ID 24</span>
+    </div>
+    <div class="status-pill"><span class="dot pulse"></span> Live prototype · simulated data feed</div>
+  </header>
+
+  <main>
+    <!-- LEFT CONTROL PANEL -->
+    <section class="panel" id="left">
+      <div class="panel-inner">
+
+        <div class="block">
+          <h2>Scenario presets</h2>
+          <div class="scenario-grid">
+            <button class="scenario-btn" data-preset="normal">Normal monsoon<br><span style="color:var(--muted)">baseline conditions</span></button>
+            <button class="scenario-btn" data-preset="heavy">Heavy rainfall event<br><span style="color:var(--muted)">3-day cloudburst</span></button>
+            <button class="scenario-btn" data-preset="deforest">Post-deforestation<br><span style="color:var(--muted)">unstable slopes</span></button>
+            <button class="scenario-btn" data-preset="dry">Dry season<br><span style="color:var(--muted)">low soil moisture</span></button>
+          </div>
+        </div>
+
+        <div class="block">
+          <h2>Environmental inputs</h2>
+          <div class="slider-row">
+            <div class="lbl">Rainfall intensity (24h) <span class="val" id="v-rain">80 mm</span></div>
+            <input type="range" id="s-rain" min="0" max="300" value="80">
+          </div>
+          <div class="slider-row">
+            <div class="lbl">Baseline soil saturation <span class="val" id="v-soil">45%</span></div>
+            <input type="range" id="s-soil" min="0" max="100" value="45">
+          </div>
+          <div class="slider-row">
+            <div class="lbl">Hill-cutting / deforestation <span class="val" id="v-def">30%</span></div>
+            <input type="range" id="s-def" min="0" max="100" value="30">
+          </div>
+          <button class="run-btn" id="run-btn">Run prediction</button>
+        </div>
+
+        <div class="block">
+          <h2>Risk legend</h2>
+          <div class="legend-row"><span class="swatch" style="background:var(--low)"></span> Low — routine monitoring</div>
+          <div class="legend-row"><span class="swatch" style="background:var(--mod)"></span> Moderate — watch conditions</div>
+          <div class="legend-row"><span class="swatch" style="background:var(--high)"></span> High — issue advisory</div>
+          <div class="legend-row"><span class="swatch" style="background:var(--crit)"></span> Critical — evacuate / respond</div>
+        </div>
+
+        <div class="block">
+          <h2>Zone summary</h2>
+          <div class="stat-grid">
+            <div class="stat"><div class="n" id="n-crit" style="color:var(--crit)">0</div><div class="l">Critical</div></div>
+            <div class="stat"><div class="n" id="n-high" style="color:var(--high)">0</div><div class="l">High</div></div>
+            <div class="stat"><div class="n" id="n-mod" style="color:var(--mod)">0</div><div class="l">Moderate</div></div>
+            <div class="stat"><div class="n" id="n-low" style="color:var(--low)">0</div><div class="l">Low</div></div>
+          </div>
+        </div>
+
+        <div class="block">
+          <h2>Multilingual advisory</h2>
+          <div class="alert-box">
+            <div class="lang" id="alert-lang">English</div>
+            <div id="alert-text">Loading advisory…</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- MAP -->
+    <div id="mapwrap">
+      <svg id="svg" viewBox="0 0 1000 720" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="map-toolbar">
+        <button class="tool-btn" id="report-toggle">Report a hazard</button>
+      </div>
+      <div class="map-caption" id="map-caption">Click any circle to inspect its AI risk breakdown. Grid points are procedurally simulated to stand in for live SRTM / GPM IMERG feeds.</div>
+    </div>
+
+    <!-- DETAIL / RIGHT PANEL -->
+    <section class="panel" id="detail">
+      <div class="panel-inner" id="detail-inner">
+        <div class="empty-state">Select a risk point on the map, or check the emergency priority list below, to see the model's explanation for that location.</div>
+      </div>
+      <div class="panel-inner" style="border-top:1px solid var(--line);">
+        <h2 style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:0 0 10px 0;">Emergency priority ranking</h2>
+        <div id="priority-list"></div>
+      </div>
+      <div class="panel-inner" style="border-top:1px solid var(--line);">
+        <h2 style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:0 0 10px 0;">Community reports (offline queue)</h2>
+        <div id="report-list" style="font-size:12px;color:var(--muted);">No reports submitted yet.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="foot-strip">
+    <span>Data sources (production): NASA GPM IMERG · SRTM DEM · OpenStreetMap · GSI landslide inventory — this build substitutes physics-consistent simulated values for all four.</span>
+    <span>Model: Random Forest (simulated) + local feature-contribution explanations</span>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // ---------------- geography ----------------
+  var BBOX = {lonMin:87.6, lonMax:97.6, latMin:22.3, latMax:28.3};
+  var W = 1000, H = 720;
+
+  var towns = [
+    {name:"Guwahati", lat:26.14, lon:91.73, hilly:0.3},
+    {name:"Shillong",  lat:25.57, lon:91.88, hilly:0.9},
+    {name:"Cherrapunji",lat:25.30, lon:91.70, hilly:1.0},
+    {name:"Aizawl",    lat:23.73, lon:92.72, hilly:0.95},
+    {name:"Kohima",    lat:25.67, lon:94.11, hilly:0.9},
+    {name:"Imphal",    lat:24.82, lon:93.94, hilly:0.6},
+    {name:"Itanagar",  lat:27.10, lon:93.62, hilly:0.85},
+    {name:"Agartala",  lat:23.83, lon:91.28, hilly:0.25},
+    {name:"Gangtok",   lat:27.33, lon:88.61, hilly:1.0},
+    {name:"Dimapur",   lat:25.91, lon:93.73, hilly:0.4}
+  ];
+
+  function project(lat, lon){
+    var x = (lon - BBOX.lonMin) / (BBOX.lonMax - BBOX.lonMin) * W;
+    var y = (BBOX.latMax - lat) / (BBOX.latMax - BBOX.latMin) * H;
+    return {x:x, y:y};
+  }
+
+  function rnd(a,b){ return a + Math.random()*(b-a); }
+  function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+  function nearestTown(lat,lon){
+    var best=null, bd=1e9;
+    towns.forEach(function(t){
+      var d = Math.hypot(t.lat-lat, t.lon-lon);
+      if(d<bd){bd=d; best=t;}
+    });
+    return best;
+  }
+
+  // ---------------- point generation ----------------
+  var points = [];
+  function generatePoints(){
+    points = [];
+    var id = 0;
+    towns.forEach(function(t){
+      var n = 4 + Math.round(t.hilly*4);
+      for(var i=0;i<n;i++){
+        var lat = t.lat + rnd(-0.35,0.35);
+        var lon = t.lon + rnd(-0.35,0.35);
+        points.push(makePoint(id++, lat, lon, t.hilly));
+      }
+    });
+    for(var i=0;i<12;i++){
+      var lat = rnd(BBOX.latMin+0.3, BBOX.latMax-0.3);
+      var lon = rnd(BBOX.lonMin+0.3, BBOX.lonMax-0.3);
+      points.push(makePoint(id++, lat, lon, rnd(0.2,0.7)));
+    }
+  }
+
+  function makePoint(id, lat, lon, hillFactor){
+    var slope = clamp(hillFactor*45 + rnd(-8,10), 2, 62);
+    var elevation = Math.round(clamp(hillFactor*2200 + rnd(-200,300), 40, 2600));
+    var distRoad = clamp(rnd(0.05, 2.0) * (1 - hillFactor*0.3), 0.05, 2.0);
+    var vulnerability = clamp(0.35 + (1-distRoad/2)*0.5 + rnd(-0.1,0.1), 0.1, 1);
+    var town = nearestTown(lat,lon);
+    return {
+      id:id, lat:lat, lon:lon, slope:slope, elevation:elevation,
+      distRoad: distRoad, vulnerability: vulnerability, town: town.name,
+      hillFactor: hillFactor
+    };
+  }
+
+  // ---------------- simulated "Random Forest" scoring ----------------
+  var sliders = { rain:80, soil:45, def:30 };
+
+  function scorePoint(p){
+    var rain24 = clamp(sliders.rain * (0.7 + p.hillFactor*0.6) + rnd(-10,10), 0, 400);
+    var rain72 = rain24 * rnd(2.0,2.8);
+    var soilMoisture = clamp(sliders.soil + rain24*0.15 + rnd(-5,5), 0, 100);
+    var humanActivity = clamp(sliders.def * (1 - p.hillFactor*0.2) + rnd(-8,8), 0, 100);
+
+    // normalized 0-1 feature values
+    var fRain   = clamp(rain24/300, 0, 1);
+    var fRain72 = clamp(rain72/700, 0, 1);
+    var fSlope  = clamp(p.slope/60, 0, 1);
+    var fSoil   = clamp(soilMoisture/100, 0, 1);
+    var fRoad   = clamp(1 - (p.distRoad/2), 0, 1);
+    var fHuman  = clamp(humanActivity/100, 0, 1);
+
+    // "tree ensemble" -> weighted logistic combination, weights ~ feature importances
+    var weights = { rain:1.7, rain72:1.1, slope:2.0, soil:1.3, road:0.6, human:1.0 };
+    var z = -3.0
+      + weights.rain*fRain
+      + weights.rain72*fRain72
+      + weights.slope*fSlope
+      + weights.soil*fSoil
+      + weights.road*fRoad
+      + weights.human*fHuman;
+    var hazard = 1/(1+Math.exp(-z));
+
+    var risk = clamp(hazard * p.vulnerability, 0, 1);
+
+    var contributions = [
+      {name:"Slope angle", val:fSlope, w:weights.slope, raw:p.slope.toFixed(0)+"°"},
+      {name:"Rainfall (24h)", val:fRain, w:weights.rain, raw:rain24.toFixed(0)+" mm"},
+      {name:"Cumulative rainfall (72h)", val:fRain72, w:weights.rain72, raw:rain72.toFixed(0)+" mm"},
+      {name:"Soil moisture", val:fSoil, w:weights.soil, raw:soilMoisture.toFixed(0)+"%"},
+      {name:"Hill-cutting / land use", val:fHuman, w:weights.human, raw:humanActivity.toFixed(0)+"%"},
+      {name:"Proximity to roads", val:fRoad, w:weights.road, raw:p.distRoad.toFixed(2)+" km"}
+    ];
+    contributions.forEach(function(c){ c.contribution = c.val*c.w; });
+    contributions.sort(function(a,b){ return b.contribution - a.contribution; });
+
+    var category = risk>0.7?"Critical": risk>0.45?"High": risk>0.22?"Moderate":"Low";
+
+    return {
+      hazard:hazard, vulnerability:p.vulnerability, risk:risk, category:category,
+      contributions: contributions, rain24: rain24
+    };
+  }
+
+  var results = {}; // id -> score
+
+  function runSimulation(){
+    generateIfNeeded();
+    points.forEach(function(p){ results[p.id] = scorePoint(p); });
+    renderMapPoints();
+    renderSummary();
+    renderPriority();
+    if(selectedId!=null) renderDetail(selectedId);
+  }
+  function generateIfNeeded(){
+    if(points.length===0) generatePoints();
+  }
+
+  // ---------------- rendering: map ----------------
+  var svg = document.getElementById('svg');
+  var NS = "http://www.w3.org/2000/svg";
+  var selectedId = null;
+
+  function catColor(cat){
+    return cat==="Critical"?"var(--crit)": cat==="High"?"var(--high)": cat==="Moderate"?"var(--mod)":"var(--low)";
+  }
+  function catColorHex(cat){
+    return cat==="Critical"?"#b3222a": cat==="High"?"#d9622f": cat==="Moderate"?"#d9a441":"#4c9a6b";
+  }
+
+  function buildStaticLayer(){
+    // soft contour-style terrain blobs
+    var defs = document.createElementNS(NS,'defs');
+    defs.innerHTML =
+      '<radialGradient id="hillGrad" cx="50%" cy="30%" r="80%">' +
+      '<stop offset="0%" stop-color="#1c2b22"/>' +
+      '<stop offset="100%" stop-color="#0c1310"/></radialGradient>';
+    svg.appendChild(defs);
+
+    var bg = document.createElementNS(NS,'rect');
+    bg.setAttribute('x',0); bg.setAttribute('y',0);
+    bg.setAttribute('width',W); bg.setAttribute('height',H);
+    bg.setAttribute('fill','url(#hillGrad)');
+    svg.appendChild(bg);
+
+    // faint contour lines
+    for(var i=0;i<9;i++){
+      var path = document.createElementNS(NS,'path');
+      var yy = 40 + i*80 + Math.sin(i)*20;
+      var d = "M -20 "+yy+" C 200 "+(yy-40)+", 400 "+(yy+40)+", 600 "+yy+" S 950 "+(yy-30)+", 1050 "+yy;
+      path.setAttribute('d', d);
+      path.setAttribute('stroke', '#1c2b22');
+      path.setAttribute('stroke-width', '1');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('opacity', '0.6');
+      svg.appendChild(path);
+    }
+
+    // town labels
+    towns.forEach(function(t){
+      var pos = project(t.lat, t.lon);
+      var c = document.createElementNS(NS,'circle');
+      c.setAttribute('cx', pos.x); c.setAttribute('cy', pos.y); c.setAttribute('r', 2.4);
+      c.setAttribute('fill', '#5f7568');
+      svg.appendChild(c);
+      var label = document.createElementNS(NS,'text');
+      label.setAttribute('x', pos.x+7); label.setAttribute('y', pos.y+4);
+      label.setAttribute('class','town-label');
+      label.textContent = t.name;
+      svg.appendChild(label);
+    });
+  }
+
+  var pointGroup, reportGroup;
+  function buildPointLayer(){
+    pointGroup = document.createElementNS(NS,'g');
+    svg.appendChild(pointGroup);
+    reportGroup = document.createElementNS(NS,'g');
+    svg.appendChild(reportGroup);
+  }
+
+  function renderMapPoints(){
+    pointGroup.innerHTML = "";
+    points.forEach(function(p){
+      var r = results[p.id];
+      var pos = project(p.lat, p.lon);
+      var circle = document.createElementNS(NS,'circle');
+      circle.setAttribute('cx', pos.x);
+      circle.setAttribute('cy', pos.y);
+      circle.setAttribute('r', 6 + r.risk*9);
+      circle.setAttribute('fill', catColorHex(r.category));
+      circle.setAttribute('fill-opacity', 0.85);
+      circle.setAttribute('stroke', '#08130d');
+      circle.setAttribute('stroke-width', 1);
+      circle.setAttribute('class','pt');
+      circle.addEventListener('click', function(){ selectedId = p.id; renderDetail(p.id); highlightSelected(); });
+      circle.dataset.id = p.id;
+      pointGroup.appendChild(circle);
+    });
+  }
+
+  function highlightSelected(){
+    Array.prototype.forEach.call(pointGroup.children, function(c){
+      c.setAttribute('stroke', c.dataset.id == selectedId ? '#ffffff' : '#08130d');
+      c.setAttribute('stroke-width', c.dataset.id == selectedId ? 2.5 : 1);
+    });
+  }
+
+  // ---------------- community reporting ----------------
+  var reportMode = false;
+  var reports = [];
+  document.getElementById('report-toggle').addEventListener('click', function(){
+    reportMode = !reportMode;
+    this.classList.toggle('active', reportMode);
+    document.getElementById('map-caption').textContent = reportMode
+      ? "Report mode: click anywhere on the map to drop a hazard pin."
+      : "Click any circle to inspect its AI risk breakdown. Grid points are procedurally simulated to stand in for live SRTM / GPM IMERG feeds.";
+  });
+
+  svg.addEventListener('click', function(e){
+    if(!reportMode) return;
+    var rect = svg.getBoundingClientRect();
+    var scaleX = W / rect.width, scaleY = H / rect.height;
+    var x = (e.clientX - rect.left) * scaleX;
+    var y = (e.clientY - rect.top) * scaleY;
+    var lon = BBOX.lonMin + (x/W)*(BBOX.lonMax-BBOX.lonMin);
+    var lat = BBOX.latMax - (y/H)*(BBOX.latMax-BBOX.latMin);
+    var desc = window.prompt("Describe what you're seeing (e.g. cracked road, minor slip, blocked path):");
+    if(desc===null) return;
+    var t = nearestTown(lat,lon);
+    var rep = {lat:lat, lon:lon, desc: desc || "Unlabelled report", town: t.name, time: new Date().toLocaleTimeString()};
+    reports.push(rep);
+    var marker = document.createElementNS(NS,'circle');
+    marker.setAttribute('cx', x); marker.setAttribute('cy', y); marker.setAttribute('r', 5);
+    marker.setAttribute('fill', '#e7ede8');
+    marker.setAttribute('stroke', '#08130d'); marker.setAttribute('stroke-width', 1.5);
+    marker.setAttribute('class','report-pt');
+    reportGroup.appendChild(marker);
+    renderReports();
+  });
+
+  function renderReports(){
+    var el = document.getElementById('report-list');
+    if(reports.length===0){ el.textContent="No reports submitted yet."; return; }
+    el.innerHTML = reports.slice().reverse().map(function(r){
+      return '<div style="padding:7px 0;border-bottom:1px solid var(--line);">'
+        + '<div style="color:var(--text);font-size:12px;">'+escapeHtml(r.desc)+'</div>'
+        + '<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">near '+r.town+' · '+r.time+' · saved offline, will sync</div>'
+        + '</div>';
+    }).join('');
+  }
+  function escapeHtml(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+  // ---------------- summary + priority ----------------
+  function renderSummary(){
+    var counts = {Critical:0, High:0, Moderate:0, Low:0};
+    points.forEach(function(p){ counts[results[p.id].category]++; });
+    document.getElementById('n-crit').textContent = counts.Critical;
+    document.getElementById('n-high').textContent = counts.High;
+    document.getElementById('n-mod').textContent = counts.Moderate;
+    document.getElementById('n-low').textContent = counts.Low;
+  }
+
+  function renderPriority(){
+    var ranked = points.map(function(p){ return {p:p, r:results[p.id]}; })
+      .sort(function(a,b){ return b.r.risk - a.r.risk; })
+      .slice(0,6);
+    var el = document.getElementById('priority-list');
+    el.innerHTML = ranked.map(function(item, i){
+      var eta = (2 + Math.round(item.r.risk*20)) + " hr ETA";
+      return '<div class="pri-item" data-id="'+item.p.id+'">'
+        + '<div class="pri-rank">'+(i+1)+'</div>'
+        + '<div class="pri-body"><div class="pri-town">'+item.p.town+' area</div><div class="pri-eta">'+eta+' · response window</div></div>'
+        + '<div class="pri-tag" style="background:'+catColorHex(item.r.category)+'22;color:'+catColorHex(item.r.category)+';">'+item.r.category+'</div>'
+        + '</div>';
+    }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.pri-item'), function(node){
+      node.addEventListener('click', function(){
+        var id = parseFloat(node.dataset.id);
+        selectedId = id; renderDetail(id); highlightSelected();
+      });
+    });
+  }
+
+  // ---------------- detail panel ----------------
+  function renderDetail(id){
+    var p = points.filter(function(x){ return x.id===id; })[0];
+    var r = results[id];
+    var pct = Math.round(r.risk*100);
+    var color = catColorHex(r.category);
+    var top = r.contributions[0];
+
+    var explanation = "This grid cell is flagged <b>"+r.category+"</b> primarily because of "
+      + top.name.toLowerCase() + " (" + top.raw + "), combined with a slope of "
+      + p.slope.toFixed(0) + "° and its proximity to roads and settlements near "
+      + p.town + ". The model's hazard estimate is " + Math.round(r.hazard*100)
+      + "%, scaled by a local vulnerability factor of " + r.vulnerability.toFixed(2)
+      + " reflecting nearby infrastructure exposure.";
+
+    var advisories = {
+      Critical: "Recommend immediate evacuation advisory for households within 500m and road closure near "+p.town+".",
+      High: "Issue a high-alert advisory to "+p.town+" area residents; pre-position rescue resources.",
+      Moderate: "Monitor conditions closely; notify local authorities to watch this zone.",
+      Low: "No action required beyond routine monitoring."
+    };
+
+    var html = '';
+    html += '<h3 class="det-title">'+p.town+' area, grid #'+p.id+'</h3>';
+    html += '<div class="det-coords">'+p.lat.toFixed(3)+'°N, '+p.lon.toFixed(3)+'°E · elevation '+p.elevation+'m</div>';
+    html += '<span class="risk-badge" style="background:'+color+'22;color:'+color+';">'+r.category+' risk</span>';
+
+    html += '<div class="gauge-wrap"><div class="kv"><span class="k">Landslide probability</span><span>'+pct+'%</span></div>';
+    html += '<div class="gauge-track"><div class="gauge-fill" style="width:'+pct+'%;background:'+color+';"></div></div></div>';
+
+    html += '<div class="kv"><span class="k">Hazard score</span><span>'+r.hazard.toFixed(2)+'</span></div>';
+    html += '<div class="kv"><span class="k">Vulnerability score</span><span>'+r.vulnerability.toFixed(2)+'</span></div>';
+    html += '<div class="kv"><span class="k">Risk score (hazard × vulnerability)</span><span>'+r.risk.toFixed(2)+'</span></div>';
+
+    html += '<div class="block" style="margin-top:16px;"><h2>Top contributing features</h2>';
+    r.contributions.slice(0,4).forEach(function(c){
+      var w = Math.round(c.val*100);
+      html += '<div class="feat-row"><div class="feat-lbl"><span>'+c.name+'</span><span style="color:var(--muted)">'+c.raw+'</span></div>';
+      html += '<div class="feat-track"><div class="feat-fill" style="width:'+w+'%;background:'+color+';"></div></div></div>';
+    });
+    html += '</div>';
+
+    html += '<div class="explain-box">'+explanation+'</div>';
+    html += '<div class="advisory">'+advisories[r.category]+'</div>';
+
+    document.getElementById('detail-inner').innerHTML = html;
+  }
+
+  // ---------------- alerts (multilingual rotation) ----------------
+  var alertMessages = [
+    {lang:"English", text:"Heavy rainfall detected in hill districts. Avoid travel through marked high-risk zones."},
+    {lang:"Hindi / हिन्दी", text:"पहाड़ी क्षेत्रों में भारी वर्षा दर्ज की गई है। चिन्हित उच्च-जोखिम क्षेत्रों से यात्रा से बचें।"},
+    {lang:"Regional languages", text:"Assamese, Khasi, Mizo and Bodo voice alerts are planned for the full deployment."}
+  ];
+  var alertIdx = 0;
+  function rotateAlert(){
+    var a = alertMessages[alertIdx % alertMessages.length];
+    document.getElementById('alert-lang').textContent = a.lang;
+    document.getElementById('alert-text').textContent = a.text;
+    alertIdx++;
+  }
+  setInterval(rotateAlert, 4200);
+
+  // ---------------- controls wiring ----------------
+  var sRain = document.getElementById('s-rain'), sSoil = document.getElementById('s-soil'), sDef = document.getElementById('s-def');
+  function syncLabels(){
+    document.getElementById('v-rain').textContent = sRain.value + " mm";
+    document.getElementById('v-soil').textContent = sSoil.value + "%";
+    document.getElementById('v-def').textContent = sDef.value + "%";
+    sliders.rain = parseFloat(sRain.value);
+    sliders.soil = parseFloat(sSoil.value);
+    sliders.def = parseFloat(sDef.value);
+  }
+  [sRain, sSoil, sDef].forEach(function(s){ s.addEventListener('input', syncLabels); });
+
+  document.getElementById('run-btn').addEventListener('click', runSimulation);
+
+  document.querySelectorAll('.scenario-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var preset = btn.dataset.preset;
+      var vals = {
+        normal:  {rain:80,  soil:45, def:30},
+        heavy:   {rain:260, soil:80, def:35},
+        deforest:{rain:110, soil:55, def:85},
+        dry:     {rain:15,  soil:15, def:25}
+      }[preset];
+      sRain.value = vals.rain; sSoil.value = vals.soil; sDef.value = vals.def;
+      syncLabels();
+      runSimulation();
+    });
+  });
+
+  // ---------------- boot ----------------
+  buildStaticLayer();
+  buildPointLayer();
+  syncLabels();
+  runSimulation();
+  rotateAlert();
+
+})();
+</script>
+</body>
+</html>
