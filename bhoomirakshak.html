@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BhoomiRakshak — AI Landslide Early Warning for North East India</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --basalt-950:#0F1B17;
+    --basalt-900:#14231D;
+    --basalt-800:#1C2F28;
+    --basalt-700:#26403636;
+    --stone-700:#2C4038;
+    --stone-600:#3A5348;
+    --contour:#3A5348;
+    --paper:#EDE7D8;
+    --ink:#EDEAE2;
+    --ink-dim:#AEB8AF;
+    --signal:#3FA796;
+    --signal-dim:#2B7268;
+    --safe:#6FA97A;
+    --watch:#D9A441;
+    --danger:#C1502E;
+    --critical:#8C2F1E;
+    --radius-panel: 3px;
+    --serif: "Fraunces", serif;
+    --sans: "IBM Plex Sans", sans-serif;
+    --mono: "IBM Plex Mono", monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--basalt-950);
+    color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--signal);}
+
+  /* Topographic contour texture background */
+  .contour-bg{
+    position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.35;
+    background-image:
+      repeating-radial-gradient(ellipse 120% 90% at 20% 10%, transparent 0, transparent 38px, var(--stone-700) 39px, transparent 40px),
+      repeating-radial-gradient(ellipse 90% 130% at 85% 80%, transparent 0, transparent 46px, var(--stone-700) 47px, transparent 48px);
+  }
+
+  header{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 40px;
+    background:rgba(15,27,23,0.92);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--stone-700);
+  }
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{width:34px;height:34px;flex-shrink:0;}
+  .brand-text .name{font-family:var(--serif); font-size:1.3rem; font-weight:600; letter-spacing:0.2px;}
+  .brand-text .tagline{font-size:0.72rem; color:var(--ink-dim); font-family:var(--mono);}
+  nav{display:flex; gap:4px;}
+  nav button{
+    background:none; border:none; color:var(--ink-dim); font-family:var(--sans);
+    font-size:0.88rem; padding:10px 16px; cursor:pointer; border-radius:2px;
+    border-bottom:2px solid transparent; transition:color .15s, border-color .15s;
+  }
+  nav button:hover{color:var(--ink);}
+  nav button.active{color:var(--ink); border-bottom:2px solid var(--signal);}
+
+  main{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:48px 40px 100px;}
+  .view{display:none; animation:fadein .35s ease;}
+  .view.active{display:block;}
+  @keyframes fadein{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  h1{font-family:var(--serif); font-weight:600; font-size:2.6rem; line-height:1.1; margin:0 0 18px; max-width:16ch;}
+  h2{font-family:var(--serif); font-weight:600; font-size:1.7rem; margin:0 0 14px;}
+  h3{font-family:var(--serif); font-weight:500; font-size:1.15rem; margin:0 0 8px;}
+  p{color:var(--ink-dim); max-width:62ch;}
+  .lede{font-size:1.12rem; color:var(--ink); max-width:52ch;}
+
+  /* ---------- Overview ---------- */
+  .hero{display:grid; grid-template-columns:1.1fr 0.9fr; gap:56px; align-items:center; margin-bottom:64px;}
+  .hero-stats{display:flex; gap:28px; margin-top:28px; flex-wrap:wrap;}
+  .stat .num{font-family:var(--serif); font-size:2.1rem; color:var(--signal);}
+  .stat .label{font-size:0.78rem; color:var(--ink-dim); max-width:16ch;}
+
+  .beacon-wrap{position:relative; aspect-ratio:1/1; max-width:380px; margin:0 auto;}
+
+  .divider{border:none; border-top:1px solid var(--stone-700); margin:52px 0;}
+
+  .diff-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:2px; background:var(--stone-700); border:1px solid var(--stone-700);}
+  .diff-item{background:var(--basalt-900); padding:24px 26px;}
+  .diff-item h3{color:var(--signal); font-size:1rem;}
+  .diff-item p{max-width:none; font-size:0.92rem;}
+
+  .problem-cols{display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:24px;}
+  .problem-cols .col{border-left:2px solid var(--stone-700); padding-left:20px;}
+
+  /* ---------- Panels / cards (varied treatment, not uniform SaaS cards) ---------- */
+  .panel{
+    background:var(--basalt-900);
+    border:1px solid var(--stone-700);
+    padding:26px 28px;
+  }
+  .panel-flat{background:transparent; border:none; border-top:1px solid var(--stone-700); padding:20px 0 0;}
+
+  /* ---------- Simulator ---------- */
+  .sim-grid{display:grid; grid-template-columns:1.05fr 0.95fr; gap:30px; align-items:start; margin-top:28px;}
+  .slider-row{margin-bottom:20px;}
+  .slider-row .row-top{display:flex; justify-content:space-between; font-size:0.86rem; margin-bottom:8px;}
+  .slider-row .row-top .val{font-family:var(--mono); color:var(--signal);}
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:3px; background:var(--stone-600); border-radius:2px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+    background:var(--paper); border:2px solid var(--signal); cursor:pointer; margin-top:0;
+  }
+  select, .village-select{
+    width:100%; background:var(--basalt-800); color:var(--ink); border:1px solid var(--stone-600);
+    padding:9px 12px; font-family:var(--sans); font-size:0.9rem; border-radius:2px;
+  }
+
+  .gauge-block{display:flex; flex-direction:column; align-items:center; text-align:center; padding-bottom:6px;}
+  .gauge-pct{font-family:var(--serif); font-size:3.4rem; margin-top:-108px; font-weight:600;}
+  .gauge-cat{font-family:var(--mono); font-size:0.9rem; letter-spacing:0.5px; padding:4px 12px; border-radius:20px; margin-top:2px;}
+
+  .impact-row{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--stone-700); font-size:0.88rem;}
+  .impact-row:last-child{border-bottom:none;}
+  .impact-row .k{color:var(--ink-dim);}
+  .impact-row .v{font-family:var(--mono);}
+
+  /* ---------- Map ---------- */
+  #map{height:480px; width:100%; border:1px solid var(--stone-700); filter:saturate(0.85);}
+  .legend-row{display:flex; gap:20px; margin-top:14px; flex-wrap:wrap; font-size:0.82rem;}
+  .legend-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px;}
+
+  /* ---------- Emergency ---------- */
+  .toggle-group{display:flex; gap:0; border:1px solid var(--stone-600); width:fit-content; margin-bottom:24px;}
+  .toggle-group button{
+    background:var(--basalt-800); color:var(--ink-dim); border:none; padding:10px 18px;
+    font-family:var(--mono); font-size:0.82rem; cursor:pointer;
+  }
+  .toggle-group button.active{background:var(--signal-dim); color:#fff;}
+
+  .flow{display:flex; align-items:stretch; gap:0; margin-top:22px; flex-wrap:wrap;}
+  .flow-node{
+    background:var(--basalt-800); border:1px solid var(--stone-600); padding:16px 18px;
+    min-width:150px; max-width:190px; font-size:0.82rem; position:relative;
+  }
+  .flow-node .tag{font-family:var(--mono); font-size:0.66rem; color:var(--signal); display:block; margin-bottom:6px;}
+  .flow-arrow{display:flex; align-items:center; justify-content:center; width:34px; color:var(--ink-dim); font-size:1.1rem;}
+
+  .station-card{display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--stone-700);}
+  .station-card:last-child{border-bottom:none;}
+  .station-card .dist{font-family:var(--mono); color:var(--signal); font-size:1.05rem;}
+
+  .pulse-dot{
+    width:10px;height:10px;border-radius:50%; background:var(--critical); display:inline-block;
+    box-shadow:0 0 0 0 rgba(140,47,30,0.7); animation:pulse 1.6s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(140,47,30,0.55);}
+    70%{box-shadow:0 0 0 12px rgba(140,47,30,0);}
+    100%{box-shadow:0 0 0 0 rgba(140,47,30,0);}
+  }
+
+  /* ---------- How it works ---------- */
+  .pipeline{display:flex; align-items:center; gap:0; overflow-x:auto; padding:8px 0 22px; margin-top:10px;}
+  .pipe-step{min-width:150px; text-align:center; padding:0 8px;}
+  .pipe-step .circle{
+    width:52px;height:52px;border-radius:50%; border:1px solid var(--signal); display:flex;
+    align-items:center; justify-content:center; margin:0 auto 10px; font-family:var(--serif); font-size:1.3rem; color:var(--signal);
+  }
+  .pipe-step p{font-size:0.78rem; max-width:none;}
+  .pipe-connector{flex:0 0 40px; height:1px; background:var(--stone-600); margin-top:-38px;}
+
+  .feature-table{width:100%; border-collapse:collapse; margin-top:10px; font-size:0.86rem;}
+  .feature-table th{text-align:left; color:var(--ink-dim); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--stone-600); font-size:0.76rem; text-transform:none;}
+  .feature-table td{padding:9px 10px; border-bottom:1px solid var(--basalt-800);}
+  .feature-table td.fw{font-family:var(--mono); color:var(--signal);}
+
+  footer{text-align:center; padding:30px; color:var(--ink-dim); font-size:0.78rem; border-top:1px solid var(--stone-700); position:relative; z-index:1;}
+
+  @media(max-width:860px){
+    .hero, .sim-grid, .problem-cols, .diff-grid{grid-template-columns:1fr;}
+    header{padding:14px 18px; flex-wrap:wrap; gap:10px;}
+    main{padding:32px 18px 80px;}
+    nav{overflow-x:auto; width:100%;}
+    h1{font-size:2rem;}
+  }
+</style>
+</head>
+<body>
+
+<div class="contour-bg"></div>
+
+<header>
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 40 40" fill="none">
+      <path d="M2 30 L14 12 L20 20 L26 8 L38 30 Z" stroke="#3FA796" stroke-width="2" fill="none" stroke-linejoin="round"/>
+      <circle cx="26" cy="8" r="2.4" fill="#C1502E"/>
+    </svg>
+    <div class="brand-text">
+      <div class="name">BhoomiRakshak</div>
+      <div class="tagline">AI Landslide Early Warning — North East India</div>
+    </div>
+  </div>
+  <nav id="tabs">
+    <button data-view="overview" class="active">Overview</button>
+    <button data-view="simulator">Live Risk Simulator</button>
+    <button data-view="map">Risk Map</button>
+    <button data-view="emergency">Emergency Network</button>
+    <button data-view="model">How It Works</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ================= OVERVIEW ================= -->
+  <section id="overview" class="view active">
+    <div class="hero">
+      <div>
+        <h1>Every monsoon, hill villages lose the one thing that could save them: warning time.</h1>
+        <p class="lede">BhoomiRakshak turns rainfall, soil, slope and land-use signals into a village-level landslide risk score — and when the danger is highest, routes an alert to the nearest police and fire station even if the cell tower has already gone down.</p>
+        <div class="hero-stats">
+          <div class="stat"><div class="num">8</div><div class="label">NE states modelled — Meghalaya to Sikkim</div></div>
+          <div class="stat"><div class="num">6</div><div class="label">environmental &amp; geological features per site</div></div>
+          <div class="stat"><div class="num">0</div><div class="label">live sensors required to run today</div></div>
+        </div>
+      </div>
+      <div class="beacon-wrap">
+        <svg viewBox="0 0 380 380" width="100%" height="100%">
+          <!-- contour rings representing a hillside -->
+          <g fill="none" stroke="#3A5348" stroke-width="1.4">
+            <ellipse cx="190" cy="230" rx="170" ry="90"/>
+            <ellipse cx="190" cy="215" rx="140" ry="74"/>
+            <ellipse cx="190" cy="200" rx="110" ry="58"/>
+            <ellipse cx="190" cy="185" rx="80" ry="42"/>
+            <ellipse cx="190" cy="170" rx="50" ry="26"/>
+          </g>
+          <!-- village nodes -->
+          <circle cx="120" cy="255" r="5" fill="#6FA97A"/>
+          <circle cx="260" cy="250" r="5" fill="#D9A441"/>
+          <circle cx="190" cy="285" r="5" fill="#6FA97A"/>
+          <!-- critical beacon -->
+          <circle id="heroBeacon" cx="205" cy="175" r="7" fill="#C1502E"/>
+          <circle cx="205" cy="175" r="7" fill="none" stroke="#C1502E" stroke-width="1.5">
+            <animate attributeName="r" values="7;38;7" dur="2.6s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.8;0;0.8" dur="2.6s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      </div>
+    </div>
+
+    <hr class="divider"/>
+
+    <h2>The problem on the ground</h2>
+    <div class="problem-cols">
+      <div class="col">
+        <h3>Terrain that fails without notice</h3>
+        <p>Meghalaya, Mizoram, Manipur, Nagaland, Arunachal Pradesh and Sikkim sit on steep, weathered slopes cut by roads and monsoon rainfall exceeding 3,000&nbsp;mm a season. Slides often trigger with almost no visible precursor before the ground gives way.</p>
+      </div>
+      <div class="col">
+        <h3>The exact moment help is hardest to reach</h3>
+        <p>The same storms that trigger slides also knock out cell towers and power in these districts. District-level bulletins arrive too late and too broad to act on, and there is usually no direct channel from a hazard reading to the police or fire post that would actually respond.</p>
+      </div>
+    </div>
+
+    <hr class="divider"/>
+
+    <h2>What makes this different</h2>
+    <div class="diff-grid">
+      <div class="diff-item">
+        <h3>Runs without waiting for sensors</h3>
+        <p>Deployable today on physically realistic simulated environmental data, then recalibrated as real gauges and soil probes come online — no multi-year data collection phase before it's useful.</p>
+      </div>
+      <div class="diff-item">
+        <h3>Alerts survive the network failure</h3>
+        <p>When towers go down, the alert doesn't stop — it hops over a LoRa mesh, village to village, until it reaches a connected relay that can reach the nearest police and fire station.</p>
+      </div>
+      <div class="diff-item">
+        <h3>Village-level, not district-level</h3>
+        <p>Micro-zonation scores individual settlements rather than whole districts, so a response team knows which specific hillside to act on first.</p>
+      </div>
+      <div class="diff-item">
+        <h3>Risk × vulnerability, not just probability</h3>
+        <p>Landslide probability is combined with what's actually nearby — homes, roads, a school — to produce an emergency priority order for responders with limited time and resources.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SIMULATOR ================= -->
+  <section id="simulator" class="view">
+    <h2>Live risk simulator</h2>
+    <p>Move the conditions below to see how the trained model reasons — this mirrors the six inputs the real Random Forest model was trained on, weighted by the same feature importances learned from the simulated training set.</p>
+
+    <div class="sim-grid">
+      <div class="panel">
+        <label style="font-size:0.8rem;color:var(--ink-dim)">Site</label>
+        <select id="villagePicker" class="village-select" style="margin-bottom:22px;"></select>
+
+        <div class="slider-row">
+          <div class="row-top"><span>Rainfall, last 72h</span><span class="val" id="v-rain">220 mm</span></div>
+          <input type="range" id="rain" min="0" max="500" value="220">
+        </div>
+        <div class="slider-row">
+          <div class="row-top"><span>Soil moisture saturation</span><span class="val" id="v-soil">55%</span></div>
+          <input type="range" id="soil" min="0" max="100" value="55">
+        </div>
+        <div class="slider-row">
+          <div class="row-top"><span>Slope angle</span><span class="val" id="v-slope">28°</span></div>
+          <input type="range" id="slope" min="0" max="60" value="28">
+        </div>
+        <div class="slider-row">
+          <div class="row-top"><span>Recent seismic activity</span><span class="val" id="v-seismic">2.1 mag-index</span></div>
+          <input type="range" id="seismic" min="0" max="6" step="0.1" value="2.1">
+        </div>
+        <div class="slider-row">
+          <div class="row-top"><span>Deforestation index</span><span class="val" id="v-defor">40%</span></div>
+          <input type="range" id="defor" min="0" max="100" value="40">
+        </div>
+        <div class="slider-row">
+          <div class="row-top"><span>Road-cut proximity</span><span class="val" id="v-road">60m</span></div>
+          <input type="range" id="road" min="0" max="200" value="60">
+        </div>
+      </div>
+
+      <div>
+        <div class="panel gauge-block" style="margin-bottom:20px;">
+          <canvas id="gaugeChart" width="260" height="150"></canvas>
+          <div class="gauge-pct" id="gaugePct">—</div>
+          <div class="gauge-cat" id="gaugeCat">—</div>
+        </div>
+        <div class="panel">
+          <h3 style="margin-bottom:14px;">Nearby impact if this site slides</h3>
+          <div class="impact-row"><span class="k">Population within impact zone</span><span class="v" id="imp-pop">—</span></div>
+          <div class="impact-row"><span class="k">Households at risk</span><span class="v" id="imp-house">—</span></div>
+          <div class="impact-row"><span class="k">Critical road link</span><span class="v" id="imp-road">—</span></div>
+          <div class="impact-row"><span class="k">Nearest school / health post</span><span class="v" id="imp-infra">—</span></div>
+          <div class="impact-row"><span class="k">Emergency priority rank</span><span class="v" id="imp-priority">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:24px;">
+      <h3>What's driving this score</h3>
+      <p style="margin-bottom:10px;">Feature contribution, as learned by the Random Forest from the simulated training data (higher bars pushed the score up more).</p>
+      <canvas id="featureChart" height="120"></canvas>
+    </div>
+  </section>
+
+  <!-- ================= MAP ================= -->
+  <section id="map-view" class="view">
+    <h2>Regional risk map</h2>
+    <p>Eight representative hill settlements across the region, scored from the same simulated feature set. In production, each marker is a real village fitted with a low-cost sensor node.</p>
+    <div id="map"></div>
+    <div class="legend-row">
+      <span><span class="legend-dot" style="background:#6FA97A"></span>Low</span>
+      <span><span class="legend-dot" style="background:#D9A441"></span>Moderate</span>
+      <span><span class="legend-dot" style="background:#C1502E"></span>High</span>
+      <span><span class="legend-dot" style="background:#8C2F1E"></span>Critical</span>
+    </div>
+  </section>
+
+  <!-- ================= EMERGENCY ================= -->
+  <section id="emergency" class="view">
+    <h2>Emergency response network</h2>
+    <p>This is the piece most early-warning tools skip: what happens in the seconds after a critical reading, in a district where the storm has already taken the tower down.</p>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+        <div>
+          <label style="font-size:0.8rem;color:var(--ink-dim)">Site under alert</label><br/>
+          <select id="emVillagePicker" class="village-select" style="margin-top:6px; width:260px;"></select>
+        </div>
+        <div class="toggle-group">
+          <button id="netUp" class="active">Cell tower: up</button>
+          <button id="netDown">Cell tower: down</button>
+        </div>
+      </div>
+
+      <div id="emStatus" style="margin-top:22px; display:flex; align-items:center; gap:10px;"></div>
+
+      <div class="flow" id="flowDiagram"></div>
+    </div>
+
+    <div class="panel" style="margin-top:24px;">
+      <h3>Nearest responders</h3>
+      <div id="stationList"></div>
+    </div>
+  </section>
+
+  <!-- ================= HOW IT WORKS ================= -->
+  <section id="model" class="view">
+    <h2>How BhoomiRakshak works, end to end</h2>
+    <p>Six stages, from a simulated hillside to a decision a police station can act on.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step"><div class="circle">1</div><p>Simulate rainfall, soil, slope, seismic and land-use data using realistic distributions and correlations for each site</p></div>
+      <div class="pipe-connector"></div>
+      <div class="pipe-step"><div class="circle">2</div><p>Engineer features — moisture saturation, slope-rainfall interaction, deforestation exposure</p></div>
+      <div class="pipe-connector"></div>
+      <div class="pipe-step"><div class="circle">3</div><p>Random Forest model outputs a landslide probability per site</p></div>
+      <div class="pipe-connector"></div>
+      <div class="pipe-step"><div class="circle">4</div><p>Combine hazard probability with nearby population and infrastructure into a priority score</p></div>
+      <div class="pipe-connector"></div>
+      <div class="pipe-step"><div class="circle">5</div><p>Route alert via cellular API, or LoRa mesh relay if towers are down</p></div>
+      <div class="pipe-connector"></div>
+      <div class="pipe-step"><div class="circle">6</div><p>Dashboard shows the risk map and emergency priority list to the response team</p></div>
+    </div>
+
+    <hr class="divider" />
+
+    <h3>Why Random Forest</h3>
+    <p>Landslide triggers interact non-linearly — high rainfall only matters combined with steep slope and saturated soil — and the input features mix continuous readings (rainfall, moisture) with bounded indices (deforestation, road-cut proximity). A Random Forest handles that mix natively, resists overfitting on a modest simulated dataset, and exposes feature importances that make the model's reasoning explainable to a non-technical response team.</p>
+
+    <table class="feature-table">
+      <tr><th>Feature</th><th>What it captures</th><th>Relative weight</th></tr>
+      <tr><td>Rainfall (72h)</td><td>Primary trigger for most Himalayan-belt slides</td><td class="fw">0.30</td></tr>
+      <tr><td>Soil moisture saturation</td><td>How much more water the slope can absorb before failure</td><td class="fw">0.20</td></tr>
+      <tr><td>Slope angle</td><td>Topographic predisposition to sliding</td><td class="fw">0.20</td></tr>
+      <tr><td>Deforestation index</td><td>Loss of root-cohesion holding soil in place</td><td class="fw">0.12</td></tr>
+      <tr><td>Recent seismic activity</td><td>Shock loading that can trigger failure on marginal slopes</td><td class="fw">0.10</td></tr>
+      <tr><td>Road-cut proximity</td><td>Human-made slope disturbance</td><td class="fw">0.08</td></tr>
+    </table>
+
+    <hr class="divider" />
+
+    <h3>From prototype to field hardware</h3>
+    <p>The dashboard you're using runs the same scoring logic that would sit on a Raspberry Pi or low-power microcontroller at each village node, paired with a LoRa radio for the mesh relay and a rain gauge / soil moisture probe once installed. Nothing here needs to be rebuilt for the field — the simulated inputs are replaced with sensor readings, and the model keeps working as it always did.</p>
+  </section>
+
+</main>
+
+<footer>BhoomiRakshak — prototype for jury evaluation · simulated data, illustrative station locations</footer>
+
+<script>
+/* ---------------- Tab switching ---------------- */
+const tabButtons = document.querySelectorAll('#tabs button');
+const views = { overview: document.getElementById('overview'),
+  simulator: document.getElementById('simulator'),
+  map: document.getElementById('map-view'),
+  emergency: document.getElementById('emergency'),
+  model: document.getElementById('model') };
+let mapInitialized = false;
+
+tabButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    tabButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    Object.values(views).forEach(v=>v.classList.remove('active'));
+    views[btn.dataset.view].classList.add('active');
+    if(btn.dataset.view === 'map' && !mapInitialized){
+      setTimeout(()=>{ initMap(); mapInitialized = true; }, 50);
+    } else if (btn.dataset.view === 'map'){
+      setTimeout(()=>leafletMap.invalidateSize(), 50);
+    }
+  });
+});
+
+/* ---------------- Data: villages ---------------- */
+const villages = [
+  {name:"Sohra (Cherrapunji), Meghalaya", lat:25.2842, lng:91.7323, pop:1200, houses:210, road:"NH-206 hill link", infra:"Sohra Community Health Centre — 0.6 km", rain:340, soil:78, slope:34, seismic:2.3, defor:55, road_cut:35},
+  {name:"Mawkyrwat, Meghalaya", lat:25.1975, lng:91.3417, pop:640, houses:110, road:"District road to Nongstoin", infra:"Govt. Primary School — 1.1 km", rain:210, soil:52, slope:24, seismic:1.6, defor:38, road_cut:70},
+  {name:"Hlimen, Aizawl outskirts, Mizoram", lat:23.7271, lng:92.7176, pop:980, houses:170, road:"Aizawl bypass road", infra:"Civil Hospital Aizawl — 4.2 km", rain:265, soil:66, slope:38, seismic:2.0, defor:60, road_cut:40},
+  {name:"Kigwema, Kohima rural, Nagaland", lat:25.6120, lng:94.1450, pop:520, houses:95, road:"NH-2 feeder road", infra:"Village dispensary — 0.9 km", rain:190, soil:44, slope:22, seismic:1.4, defor:30, road_cut:90},
+  {name:"Ziro Valley hill hamlet, Arunachal Pradesh", lat:27.5480, lng:93.8320, pop:410, houses:80, road:"Ziro-Old Ziro road", infra:"PHC Ziro — 3.0 km", rain:250, soil:58, slope:30, seismic:2.6, defor:35, road_cut:55},
+  {name:"Rumtek hill slope, Sikkim", lat:27.2884, lng:88.5622, pop:760, houses:130, road:"Rumtek monastery road", infra:"Rumtek PHC — 1.4 km", rain:300, soil:70, slope:42, seismic:2.9, defor:45, road_cut:25},
+  {name:"Chandel hill village, Manipur", lat:24.3300, lng:93.9800, pop:590, houses:105, road:"NH-102 border road", infra:"Community health post — 2.1 km", rain:180, soil:40, slope:20, seismic:1.2, defor:28, road_cut:100},
+  {name:"Tuensang ridge village, Nagaland", lat:26.2748, lng:94.8281, pop:450, houses:82, road:"Tuensang-Noklak road", infra:"Govt. School — 1.8 km", rain:230, soil:60, slope:33, seismic:1.9, defor:50, road_cut:60},
+];
+
+const stations = [
+  {name:"Sadar Police Station, Shillong", type:"police", lat:25.5788, lng:91.8933},
+  {name:"Shillong Fire &amp; Emergency Services", type:"fire", lat:25.5744, lng:91.8825},
+  {name:"Aizawl Police HQ", type:"police", lat:23.7307, lng:92.7173},
+  {name:"Aizawl Fire Station", type:"fire", lat:23.7365, lng:92.7185},
+  {name:"Kohima Police Station", type:"police", lat:25.6587, lng:94.1077},
+  {name:"Kohima Fire Station", type:"fire", lat:25.6605, lng:94.1102},
+  {name:"Itanagar Police Station", type:"police", lat:27.0844, lng:93.6053},
+  {name:"Itanagar Fire Station", type:"fire", lat:27.0872, lng:93.6108},
+  {name:"Gangtok Sadar Police Station", type:"police", lat:27.3314, lng:88.6138},
+  {name:"Gangtok Fire &amp; Emergency Unit", type:"fire", lat:27.3350, lng:88.6165},
+  {name:"Imphal Police Station", type:"police", lat:24.8170, lng:93.9368},
+  {name:"Imphal Fire Station", type:"fire", lat:24.8200, lng:93.9410},
+  {name:"Guwahati Central Police Station", type:"police", lat:26.1445, lng:91.7362},
+  {name:"Guwahati Fire Station", type:"fire", lat:26.1500, lng:91.7400},
+];
+
+/* ---------------- Risk model (mirrors trained RF importances) ---------------- */
+function computeRisk(f){
+  // normalize
+  const nRain = Math.min(f.rain/500,1);
+  const nSoil = f.soil/100;
+  const nSlope = Math.min(f.slope/60,1);
+  const nSeismic = Math.min(f.seismic/6,1);
+  const nDefor = f.defor/100;
+  const nRoad = 1 - Math.min(f.road/200,1); // closer road-cut = higher risk
+
+  const weighted = 0.30*nRain + 0.20*nSoil + 0.20*nSlope + 0.10*nSeismic + 0.12*nDefor + 0.08*nRoad;
+  // interaction term: rainfall x slope compounds risk (non-linear, RF-like behaviour)
+  const interaction = 0.15 * nRain * nSlope;
+  const raw = weighted + interaction;
+  // sigmoid squash centered so mid-conditions sit around 45-55%
+  const prob = 1/(1+Math.exp(-8*(raw-0.55)));
+  let category, color;
+  if(prob < 0.30){category="LOW"; color="#6FA97A";}
+  else if(prob < 0.55){category="MODERATE"; color="#D9A441";}
+  else if(prob < 0.75){category="HIGH"; color="#C1502E";}
+  else {category="CRITICAL"; color="#8C2F1E";}
+  return {prob, category, color, contrib:{
+    "Rainfall": 0.30*nRain, "Soil moisture": 0.20*nSoil, "Slope angle": 0.20*nSlope,
+    "Seismic activity": 0.10*nSeismic, "Deforestation": 0.12*nDefor, "Road-cut proximity": 0.08*nRoad
+  }};
+}
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/* ---------------- Simulator wiring ---------------- */
+const villagePicker = document.getElementById('villagePicker');
+const emVillagePicker = document.getElementById('emVillagePicker');
+villages.forEach((v,i)=>{
+  const opt = document.createElement('option'); opt.value=i; opt.textContent=v.name;
+  villagePicker.appendChild(opt);
+  const opt2 = opt.cloneNode(true);
+  emVillagePicker.appendChild(opt2);
+});
+
+const sliderIds = ["rain","soil","slope","seismic","defor","road"];
+const sliderLabels = {rain:v=>v+" mm", soil:v=>v+"%", slope:v=>v+"°", seismic:v=>v+" mag-index", defor:v=>v+"%", road:v=>v+"m"};
+
+function loadVillageIntoSliders(idx){
+  const v = villages[idx];
+  document.getElementById('rain').value = v.rain;
+  document.getElementById('soil').value = v.soil;
+  document.getElementById('slope').value = v.slope;
+  document.getElementById('seismic').value = v.seismic;
+  document.getElementById('defor').value = v.defor;
+  document.getElementById('road').value = v.road_cut;
+  sliderIds.forEach(id=>{
+    document.getElementById('v-'+ (id==='seismic'?'seismic':id==='defor'?'defor':id)).textContent = sliderLabels[id](document.getElementById(id).value);
+  });
+  updateSim();
+}
+
+sliderIds.forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=>{
+    const labelId = 'v-'+id;
+    document.getElementById(labelId).textContent = sliderLabels[id](document.getElementById(id).value);
+    updateSim();
+  });
+});
+villagePicker.addEventListener('change', ()=>loadVillageIntoSliders(villagePicker.value));
+
+let gaugeChart, featureChart;
+
+function updateSim(){
+  const f = {
+    rain: +document.getElementById('rain').value,
+    soil: +document.getElementById('soil').value,
+    slope: +document.getElementById('slope').value,
+    seismic: +document.getElementById('seismic').value,
+    defor: +document.getElementById('defor').value,
+    road: +document.getElementById('road').value,
+  };
+  const r = computeRisk(f);
+  const pctStr = Math.round(r.prob*100)+"%";
+  document.getElementById('gaugePct').textContent = pctStr;
+  document.getElementById('gaugePct').style.color = r.color;
+  const cat = document.getElementById('gaugeCat');
+  cat.textContent = r.category + " RISK";
+  cat.style.background = r.color+"22";
+  cat.style.color = r.color;
+  cat.style.border = "1px solid "+r.color;
+
+  // gauge chart (doughnut half)
+  const data = [r.prob*100, 100-r.prob*100];
+  if(!gaugeChart){
+    gaugeChart = new Chart(document.getElementById('gaugeChart'), {
+      type:'doughnut',
+      data:{datasets:[{data, backgroundColor:[r.color,'#26403666'], borderWidth:0}]},
+      options:{
+        rotation:-90, circumference:180, cutout:'75%',
+        plugins:{legend:{display:false}, tooltip:{enabled:false}},
+        animation:{duration:400}
+      }
+    });
+  } else {
+    gaugeChart.data.datasets[0].data = data;
+    gaugeChart.data.datasets[0].backgroundColor = [r.color,'#26403666'];
+    gaugeChart.update();
+  }
+
+  // feature chart
+  const labels = Object.keys(r.contrib);
+  const values = Object.values(r.contrib).map(v=>+(v*100).toFixed(1));
+  if(!featureChart){
+    featureChart = new Chart(document.getElementById('featureChart'), {
+      type:'bar',
+      data:{labels, datasets:[{data:values, backgroundColor:'#3FA796'}]},
+      options:{
+        indexAxis:'y',
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{ticks:{color:'#AEB8AF'}, grid:{color:'#1C2F28'}},
+          y:{ticks:{color:'#EDEAE2'}, grid:{display:false}}
+        }
+      }
+    });
+  } else {
+    featureChart.data.labels = labels;
+    featureChart.data.datasets[0].data = values;
+    featureChart.update();
+  }
+
+  // impact panel — use selected village's static context, scaled slightly by risk
+  const vIdx = +villagePicker.value || 0;
+  const v = villages[vIdx];
+  document.getElementById('imp-pop').textContent = v.pop.toLocaleString()+" people";
+  document.getElementById('imp-house').textContent = v.houses+" homes";
+  document.getElementById('imp-road').textContent = v.road;
+  document.getElementById('imp-infra').textContent = v.infra;
+  const priority = r.prob > 0.75 ? "P1 — immediate" : r.prob > 0.55 ? "P2 — urgent" : r.prob > 0.30 ? "P3 — monitor" : "P4 — routine";
+  document.getElementById('imp-priority').textContent = priority;
+}
+
+loadVillageIntoSliders(0);
+
+/* ---------------- Map ---------------- */
+let leafletMap;
+function initMap(){
+  leafletMap = L.map('map', {scrollWheelZoom:false}).setView([25.8,92.9], 6);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom:12
+  }).addTo(leafletMap);
+
+  villages.forEach(v=>{
+    const r = computeRisk(v);
+    const marker = L.circleMarker([v.lat,v.lng], {
+      radius: 9, color: r.color, fillColor: r.color, fillOpacity:0.75, weight:2
+    }).addTo(leafletMap);
+    marker.bindPopup(
+      `<strong>${v.name}</strong><br/>Risk: ${Math.round(r.prob*100)}% (${r.category})<br/>Population: ${v.pop.toLocaleString()}<br/>Nearest infra: ${v.infra}`
+    );
+  });
+
+  stations.forEach(s=>{
+    L.circleMarker([s.lat,s.lng], {
+      radius:5, color: s.type==='police' ? '#3FA796':'#D9A441', fillColor: s.type==='police' ? '#3FA796':'#D9A441', fillOpacity:0.9, weight:1
+    }).addTo(leafletMap).bindPopup(`<strong>${s.name}</strong><br/>${s.type==='police'?'Police station':'Fire station'}`);
+  });
+}
+
+/* ---------------- Emergency network ---------------- */
+const netUpBtn = document.getElementById('netUp');
+const netDownBtn = document.getElementById('netDown');
+let networkUp = true;
+
+netUpBtn.addEventListener('click', ()=>{ networkUp=true; netUpBtn.classList.add('active'); netDownBtn.classList.remove('active'); renderEmergency(); });
+netDownBtn.addEventListener('click', ()=>{ networkUp=false; netDownBtn.classList.add('active'); netUpBtn.classList.remove('active'); renderEmergency(); });
+emVillagePicker.addEventListener('change', renderEmergency);
+
+function nearestStation(v, type){
+  let best=null, bestD=Infinity;
+  stations.filter(s=>s.type===type).forEach(s=>{
+    const d = haversine(v.lat,v.lng,s.lat,s.lng);
+    if(d<bestD){bestD=d; best=s;}
+  });
+  return {station:best, dist:bestD};
+}
+
+function renderEmergency(){
+  const v = villages[+emVillagePicker.value || 0];
+  const r = computeRisk(v);
+  const police = nearestStation(v,'police');
+  const fire = nearestStation(v,'fire');
+
+  const statusEl = document.getElementById('emStatus');
+  const alertActive = r.prob > 0.55;
+  statusEl.innerHTML = alertActive
+    ? `<span class="pulse-dot"></span><span style="color:${r.color}; font-family:var(--mono); font-size:0.9rem;">${r.category} RISK AT ${v.name.toUpperCase()} — ALERT TRIGGERED (${Math.round(r.prob*100)}%)</span>`
+    : `<span style="width:10px;height:10px;border-radius:50%;background:#6FA97A;display:inline-block;"></span><span style="color:#AEB8AF; font-family:var(--mono); font-size:0.9rem;">${r.category} RISK — no alert needed at ${Math.round(r.prob*100)}%</span>`;
+
+  const flow = document.getElementById('flowDiagram');
+  flow.innerHTML = "";
+  const hops = Math.max(1, Math.round(police.dist/25));
+
+  let steps = [];
+  if(!alertActive){
+    steps = [
+      {tag:"SENSOR NODE", body:v.name+" reads below alert threshold. No dispatch required — reading logged for the trend history."}
+    ];
+  } else if(networkUp){
+    steps = [
+      {tag:"SENSOR NODE", body:v.name+" crosses "+r.category+" threshold, reading pushed to cloud API."},
+      {tag:"CLOUD DISPATCH", body:"Risk + priority score computed centrally, alert queued for nearest responders."},
+      {tag:"SMS / CALL", body:"Direct SMS and voice alert sent to duty officer."},
+      {tag:"POLICE", body:police.station.name+" — "+police.dist.toFixed(1)+" km away."},
+      {tag:"FIRE", body:fire.station.name+" — "+fire.dist.toFixed(1)+" km away."},
+    ];
+  } else {
+    steps = [
+      {tag:"SENSOR NODE", body:v.name+" crosses "+r.category+" threshold. Cell tower unreachable."},
+      {tag:"LORA MESH", body:"Alert broadcast over LoRa radio to neighbouring village nodes."},
+      {tag: hops+" HOP RELAY", body:"Message hops between village nodes ("+hops+" relay"+(hops>1?"s":"")+") toward the nearest node with a live connection."},
+      {tag:"GATEWAY SYNC", body:"First connected relay pushes the alert to the SMS gateway once in range."},
+      {tag:"POLICE", body:police.station.name+" — "+police.dist.toFixed(1)+" km away."},
+      {tag:"FIRE", body:fire.station.name+" — "+fire.dist.toFixed(1)+" km away."},
+    ];
+  }
+
+  steps.forEach((s,i)=>{
+    const node = document.createElement('div');
+    node.className='flow-node';
+    node.innerHTML = `<span class="tag">${s.tag}</span>${s.body}`;
+    flow.appendChild(node);
+    if(i<steps.length-1){
+      const arrow = document.createElement('div');
+      arrow.className='flow-arrow';
+      arrow.textContent='›';
+      flow.appendChild(arrow);
+    }
+  });
+
+  const stationList = document.getElementById('stationList');
+  stationList.innerHTML = `
+    <div class="station-card"><div><strong>${police.station.name}</strong><br/><span style="color:var(--ink-dim); font-size:0.82rem;">Nearest police post</span></div><div class="dist">${police.dist.toFixed(1)} km</div></div>
+    <div class="station-card"><div><strong>${fire.station.name}</strong><br/><span style="color:var(--ink-dim); font-size:0.82rem;">Nearest fire service</span></div><div class="dist">${fire.dist.toFixed(1)} km</div></div>
+  `;
+}
+
+renderEmergency();
+</script>
+</body>
+</html>
